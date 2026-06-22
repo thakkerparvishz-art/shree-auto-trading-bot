@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import requests
 import time
 import random
@@ -13,21 +13,32 @@ SECRET_KEY = "GPkmZFqzAiv7fhweXnaG7A6YtnxN1gGt2CFJCAwCojgB"
 BASE_URL   = "https://paper-api.alpaca.markets"
 DATA_URL   = "https://data.alpaca.markets"
 HEADERS    = {"APCA-API-KEY-ID": API_KEY, "APCA-API-SECRET-KEY": SECRET_KEY}
+IST        = timezone(timedelta(hours=5, minutes=30))
 
-USER = {
+# ── Admin Account ─────────────────────────────────────────────────────────────
+ADMIN = {
     "username": "Parvish",
     "password": "Parvish753210#",
-    "email":    "thakkerparvviish@gmail.com",
-    "mobile":   "9879112655",
+    "role":     "admin",
 }
 
-# ── 5 Strategy Slots ──────────────────────────────────────────────────────────
+# ── 5 Client Accounts ─────────────────────────────────────────────────────────
+if "clients" not in st.session_state:
+    st.session_state.clients = {
+        "client1": {"name": "Client 1", "username": "client1", "password": "Client1@123", "active": True,  "mode": "Paper", "strategy": "Strategy 1", "quantity": 1, "trades": [], "balance": 10000},
+        "client2": {"name": "Client 2", "username": "client2", "password": "Client2@123", "active": True,  "mode": "Paper", "strategy": "Strategy 1", "quantity": 1, "trades": [], "balance": 10000},
+        "client3": {"name": "Client 3", "username": "client3", "password": "Client3@123", "active": True,  "mode": "Paper", "strategy": "Strategy 1", "quantity": 1, "trades": [], "balance": 10000},
+        "client4": {"name": "Client 4", "username": "client4", "password": "Client4@123", "active": False, "mode": "Paper", "strategy": "Strategy 1", "quantity": 1, "trades": [], "balance": 10000},
+        "client5": {"name": "Client 5", "username": "client5", "password": "Client5@123", "active": False, "mode": "Paper", "strategy": "Strategy 1", "quantity": 1, "trades": [], "balance": 10000},
+    }
+
+# ── Strategies ────────────────────────────────────────────────────────────────
 STRATEGIES = {
-    "Strategy 1": {"name": "EMA Crossover", "status": "ACTIVE", "code": "ema_crossover"},
-    "Strategy 2": {"name": "Empty Slot", "status": "EMPTY", "code": None},
-    "Strategy 3": {"name": "Empty Slot", "status": "EMPTY", "code": None},
-    "Strategy 4": {"name": "Empty Slot", "status": "EMPTY", "code": None},
-    "Strategy 5": {"name": "Empty Slot", "status": "EMPTY", "code": None},
+    "Strategy 1": "EMA Crossover",
+    "Strategy 2": "Empty Slot",
+    "Strategy 3": "Empty Slot",
+    "Strategy 4": "Empty Slot",
+    "Strategy 5": "Empty Slot",
 }
 
 st.set_page_config(page_title="SHREE AUTO TRADING BOT", page_icon="🤖", layout="wide")
@@ -41,30 +52,64 @@ st.markdown("""
     .sub-title { text-align:center; color:#8b949e; font-size:13px; letter-spacing:3px; text-transform:uppercase; margin-bottom:20px; }
     .ticker { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px 20px; color:#8b949e; font-size:12px; text-align:center; letter-spacing:2px; margin-bottom:15px; }
     .user-badge { background:linear-gradient(135deg,#161b22,#1c2128); border:1px solid #30363d; border-radius:8px; padding:8px 16px; color:#00d4aa; font-size:13px; font-weight:700; letter-spacing:2px; text-align:center; margin-bottom:10px; }
+    .admin-badge { background:linear-gradient(135deg,#1a0a3a,#2d1060); border:1px solid #7b2ff7; border-radius:8px; padding:8px 16px; color:#bc8cff; font-size:13px; font-weight:700; letter-spacing:2px; text-align:center; margin-bottom:10px; }
     [data-testid="stMetric"] { background:linear-gradient(135deg,#161b22,#1c2128); border:1px solid #30363d; border-radius:12px; padding:16px; box-shadow:0 4px 15px rgba(0,0,0,0.3); }
     [data-testid="stMetricLabel"] { color:#8b949e !important; font-size:12px !important; letter-spacing:1px; text-transform:uppercase; }
     [data-testid="stMetricValue"] { color:#e6edf3 !important; font-size:24px !important; font-weight:700 !important; }
-    .signal-buy { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-left:4px solid #2ea043; border-radius:8px; padding:16px 20px; font-size:18px; font-weight:700; color:#3fb950; letter-spacing:1px; margin:10px 0; }
+    .signal-buy  { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-left:4px solid #2ea043; border-radius:8px; padding:16px 20px; font-size:18px; font-weight:700; color:#3fb950; letter-spacing:1px; margin:10px 0; }
     .signal-sell { background:linear-gradient(135deg,#2d0f0f,#4a1c1c); border:1px solid #da3633; border-left:4px solid #da3633; border-radius:8px; padding:16px 20px; font-size:18px; font-weight:700; color:#f85149; letter-spacing:1px; margin:10px 0; }
     .signal-hold { background:linear-gradient(135deg,#1c1a0f,#332d10); border:1px solid #9e6a03; border-left:4px solid #d29922; border-radius:8px; padding:16px 20px; font-size:18px; font-weight:700; color:#d29922; letter-spacing:1px; margin:10px 0; }
-    .strategy-active { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-radius:12px; padding:15px; margin:5px 0; }
-    .strategy-empty { background:linear-gradient(135deg,#161b22,#1c2128); border:1px solid #30363d; border-radius:12px; padding:15px; margin:5px 0; border-style:dashed; }
-    .strategy-testing { background:linear-gradient(135deg,#1c1a0f,#332d10); border:1px solid #d29922; border-radius:12px; padding:15px; margin:5px 0; }
-    .backtest-result { background:linear-gradient(135deg,#0a0f1e,#161b22); border:1px solid #30363d; border-radius:12px; padding:20px; margin:10px 0; }
-    .login-title { text-align:center; font-size:28px; font-weight:900; background:linear-gradient(90deg,#00d4aa,#00a8ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; letter-spacing:3px; margin-bottom:10px; }
-    .otp-box { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-radius:12px; padding:20px; text-align:center; color:#3fb950; font-size:14px; margin:10px 0; }
+    .client-card-active   { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-radius:12px; padding:15px; margin:5px 0; }
+    .client-card-inactive { background:linear-gradient(135deg,#2d0f0f,#4a1c1c); border:1px solid #da3633; border-radius:12px; padding:15px; margin:5px 0; }
+    .client-card-live     { background:linear-gradient(135deg,#1a0505,#3d1010); border:2px solid #ff4444; border-radius:12px; padding:15px; margin:5px 0; }
+    .live-badge   { background:#ff4444; color:white; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+    .paper-badge  { background:#0066cc; color:white; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+    .admin-panel  { background:linear-gradient(135deg,#1a0a3a,#0d1117); border:1px solid #7b2ff7; border-radius:12px; padding:20px; margin:10px 0; }
+    .trade-win    { background:linear-gradient(135deg,#0d2818,#1a4731); border:1px solid #2ea043; border-radius:8px; padding:12px; margin:5px 0; }
+    .trade-loss   { background:linear-gradient(135deg,#2d0f0f,#4a1c1c); border:1px solid #da3633; border-radius:8px; padding:12px; margin:5px 0; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── Session State ─────────────────────────────────────────────────────────────
-if "logged_in"      not in st.session_state: st.session_state.logged_in      = False
-if "otp_sent"       not in st.session_state: st.session_state.otp_sent       = False
-if "otp_code"       not in st.session_state: st.session_state.otp_code       = None
-if "otp_expiry"     not in st.session_state: st.session_state.otp_expiry     = None
+if "logged_in"   not in st.session_state: st.session_state.logged_in   = False
+if "role"        not in st.session_state: st.session_state.role        = None
+if "current_user"not in st.session_state: st.session_state.current_user= None
 if "login_attempts" not in st.session_state: st.session_state.login_attempts = 0
 if "locked_until"   not in st.session_state: st.session_state.locked_until   = None
-if "page"           not in st.session_state: st.session_state.page           = "dashboard"
-if "backtest_slot"  not in st.session_state: st.session_state.backtest_slot  = None
+
+# ── Data Loading ──────────────────────────────────────────────────────────────
+@st.cache_data(ttl=30)
+def load_account():
+    try:
+        r  = requests.get(f"{BASE_URL}/v2/account",   headers=HEADERS, timeout=10)
+        r2 = requests.get(f"{BASE_URL}/v2/positions",  headers=HEADERS, timeout=10)
+        return r.json(), r2.json(), None
+    except Exception as e:
+        return {}, [], str(e)
+
+@st.cache_data(ttl=30)
+def load_bars(sym, tf, limit=200):
+    try:
+        url    = f"{DATA_URL}/v2/stocks/{sym}/bars"
+        params = {"timeframe": tf, "limit": limit, "feed": "iex"}
+        r = requests.get(url, headers=HEADERS, params=params, timeout=10)
+        r.raise_for_status()
+        bars = r.json().get("bars", [])
+        if not bars:
+            return pd.DataFrame(), "Market closed or no data"
+        df = pd.DataFrame(bars)
+        df = df.rename(columns={"t":"time","o":"open","h":"high","l":"low","c":"close","v":"volume"})
+        df["time"] = pd.to_datetime(df["time"])
+        df = df.set_index("time")
+        df["ema9"]  = df["close"].ewm(span=9).mean()
+        df["ema21"] = df["close"].ewm(span=21).mean()
+        delta = df["close"].diff()
+        gain  = delta.clip(lower=0).rolling(14).mean()
+        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        df["rsi"] = 100 - (100/(1+gain/loss))
+        return df, None
+    except Exception as e:
+        return pd.DataFrame(), str(e)
 
 # ── LOGIN PAGE ────────────────────────────────────────────────────────────────
 if not st.session_state.logged_in:
@@ -73,128 +118,101 @@ if not st.session_state.logged_in:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.session_state.locked_until and datetime.now() < st.session_state.locked_until:
-            remaining = (st.session_state.locked_until - datetime.now()).seconds
-            st.error(f"🔒 Too many failed attempts! Try again in {remaining} seconds.")
+        if st.session_state.locked_until and datetime.now(IST) < st.session_state.locked_until:
+            remaining = (st.session_state.locked_until - datetime.now(IST)).seconds
+            st.error(f"🔒 Account locked! Try again in {remaining} seconds.")
             st.stop()
 
-        st.markdown('<div class="login-title">🔐 LOGIN</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;color:#8b949e;margin-bottom:20px;">WELCOME BACK · PARVISH</div>', unsafe_allow_html=True)
+        st.markdown('<div style="text-align:center;font-size:28px;font-weight:900;color:#00d4aa;letter-spacing:3px;margin-bottom:20px;">🔐 LOGIN</div>', unsafe_allow_html=True)
 
-        method = st.radio("Login Method", ["🔑 Password", "📱 Mobile OTP"], horizontal=True)
+        username = st.text_input("👤 Username", placeholder="Enter username")
+        password = st.text_input("🔒 Password", type="password", placeholder="Enter password")
 
-        if method == "🔑 Password":
-            st.markdown("---")
-            username = st.text_input("👤 Username", placeholder="Enter username")
-            password = st.text_input("🔒 Password", type="password", placeholder="Enter password")
-            if st.button("🚀 LOGIN", use_container_width=True):
-                if username == USER["username"] and password == USER["password"]:
-                    st.session_state.logged_in = True
+        if st.button("🚀 LOGIN", use_container_width=True):
+            # Check Admin
+            if username == ADMIN["username"] and password == ADMIN["password"]:
+                st.session_state.logged_in    = True
+                st.session_state.role         = "admin"
+                st.session_state.current_user = "Parvish"
+                st.session_state.login_attempts = 0
+                st.rerun()
+            # Check Clients
+            elif username in st.session_state.clients:
+                client = st.session_state.clients[username]
+                if not client["active"]:
+                    st.error("❌ Your account has been deactivated. Contact Admin.")
+                elif client["password"] == password:
+                    st.session_state.logged_in    = True
+                    st.session_state.role         = "client"
+                    st.session_state.current_user = username
                     st.session_state.login_attempts = 0
                     st.rerun()
                 else:
                     st.session_state.login_attempts += 1
                     if st.session_state.login_attempts >= 3:
-                        st.session_state.locked_until = datetime.now() + timedelta(minutes=5)
-                        st.error("🔒 Account locked for 5 minutes!")
+                        st.session_state.locked_until = datetime.now(IST) + timedelta(minutes=5)
+                        st.error("🔒 Too many attempts! Account locked for 5 minutes.")
                     else:
-                        st.error(f"❌ Wrong credentials! {3 - st.session_state.login_attempts} attempts left.")
-        else:
-            st.markdown("---")
-            st.info(f"📱 OTP will be shown on screen")
-            if not st.session_state.otp_sent:
-                if st.button("📲 SEND OTP", use_container_width=True):
-                    otp = str(random.randint(100000, 999999))
-                    st.session_state.otp_code   = otp
-                    st.session_state.otp_expiry = datetime.now() + timedelta(minutes=5)
-                    st.session_state.otp_sent   = True
-                    st.session_state.otp_display = otp
-                    st.rerun()
+                        st.error(f"❌ Wrong password! {3-st.session_state.login_attempts} attempts left.")
             else:
-                if hasattr(st.session_state, 'otp_display'):
-                    st.markdown(f'<div class="otp-box">📱 Your OTP: <b style="font-size:24px;letter-spacing:8px">{st.session_state.otp_display}</b><br><small>Valid for 5 minutes</small></div>', unsafe_allow_html=True)
-                otp_input = st.text_input("🔢 Enter OTP", placeholder="Enter 6-digit OTP", max_chars=6)
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("✅ VERIFY OTP", use_container_width=True):
-                        if datetime.now() > st.session_state.otp_expiry:
-                            st.error("⏰ OTP expired!")
-                            st.session_state.otp_sent = False
-                        elif otp_input == st.session_state.otp_code:
-                            st.session_state.logged_in = True
-                            st.session_state.otp_sent  = False
-                            st.rerun()
-                        else:
-                            st.error("❌ Wrong OTP!")
-                with col_b:
-                    if st.button("🔄 RESEND", use_container_width=True):
-                        st.session_state.otp_sent = False
-                        st.rerun()
+                st.session_state.login_attempts += 1
+                st.error("❌ Username not found!")
+
+        st.markdown("---")
+        st.markdown('<div style="text-align:center;color:#8b949e;font-size:11px;">🔐 SHREE AUTO TRADING BOT · PRIVATE & CONFIDENTIAL<br>Unauthorized access is strictly prohibited</div>', unsafe_allow_html=True)
 
 # ── MAIN APP ──────────────────────────────────────────────────────────────────
 else:
+    now = datetime.now(IST)
+
     # Header
     st.markdown('<div class="main-title">SHREE AUTO TRADING BOT</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title">⚡ POWERED BY ALPACA PAPER TRADING · EMA CROSSOVER STRATEGY ⚡</div>', unsafe_allow_html=True)
-    now = datetime.now()
-    st.markdown(f'<div class="ticker">🕐 {now.strftime("%A, %d %B %Y  |  %H:%M:%S IST")}  |  PAPER TRADING MODE  |  RISK FREE  |  👤 PARVISH</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="ticker">🕐 {now.strftime("%A, %d %B %Y  |  %H:%M:%S IST")}  |  👤 {st.session_state.current_user.upper()}  |  {"👑 ADMIN" if st.session_state.role == "admin" else "👤 CLIENT"}</div>', unsafe_allow_html=True)
 
-    # Sidebar
-    st.sidebar.markdown(f'<div class="user-badge">👤 PARVISH · LOGGED IN</div>', unsafe_allow_html=True)
-    st.sidebar.markdown("## ⚙️ BOT CONTROLS")
-    symbol    = st.sidebar.selectbox("📈 Symbol", ["AAPL","TSLA","GOOGL","MSFT","AMZN","SPY","NVDA","META"], index=0)
+    # ── SIDEBAR ───────────────────────────────────────────────────────────────
+    if st.session_state.role == "admin":
+        st.sidebar.markdown('<div class="admin-badge">👑 PARVISH · ADMIN</div>', unsafe_allow_html=True)
+    else:
+        client_name = st.session_state.clients[st.session_state.current_user]["name"]
+        st.sidebar.markdown(f'<div class="user-badge">👤 {client_name.upper()} · CLIENT</div>', unsafe_allow_html=True)
+
+    st.sidebar.markdown("## ⚙️ CONTROLS")
+    symbol    = st.sidebar.selectbox("📈 Symbol", ["BTCUSD","XAUUSD","EURUSD"], index=0)
     timeframe = st.sidebar.selectbox("⏱ Timeframe", ["5Min","15Min","30Min","1Hour","1Day"], index=1)
     st.sidebar.markdown("---")
     auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=False)
     st.sidebar.markdown("---")
 
-    # Navigation
-    st.sidebar.markdown("## 📱 NAVIGATION")
-    page = st.sidebar.radio("", ["📊 Dashboard", "🧠 Strategies", "📈 Backtest"], label_visibility="collapsed")
+    # Navigation based on role
+    if st.session_state.role == "admin":
+        st.sidebar.markdown("## 📱 NAVIGATION")
+        page = st.sidebar.radio("", [
+            "📊 Dashboard",
+            "🧠 Strategies",
+            "📈 Backtest",
+            "📋 Trade Report",
+            "👥 Client Manager",
+        ], label_visibility="collapsed")
+    else:
+        st.sidebar.markdown("## 📱 NAVIGATION")
+        page = st.sidebar.radio("", [
+            "📊 Dashboard",
+            "💼 My Trading",
+            "📋 My Trade Report",
+        ], label_visibility="collapsed")
+
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 LOGOUT", use_container_width=True):
-        st.session_state.logged_in = False
+        st.session_state.logged_in    = False
+        st.session_state.role         = None
+        st.session_state.current_user = None
         st.rerun()
 
-    # ── Data Loading ──────────────────────────────────────────────────────────
-    @st.cache_data(ttl=30)
-    def load_account():
-        try:
-            r  = requests.get(f"{BASE_URL}/v2/account",   headers=HEADERS, timeout=10)
-            r2 = requests.get(f"{BASE_URL}/v2/positions",  headers=HEADERS, timeout=10)
-            return r.json(), r2.json(), None
-        except Exception as e:
-            return {}, [], str(e)
-
-    @st.cache_data(ttl=30)
-    def load_bars(sym, tf, limit=200):
-        try:
-            url = f"{DATA_URL}/v2/stocks/{sym}/bars"
-            params = {"timeframe": tf, "limit": limit, "feed": "iex"}
-            r = requests.get(url, headers=HEADERS, params=params, timeout=10)
-            r.raise_for_status()
-            bars = r.json().get("bars", [])
-            if not bars:
-                return pd.DataFrame(), "Market closed or no data"
-            df = pd.DataFrame(bars)
-            df = df.rename(columns={"t":"time","o":"open","h":"high","l":"low","c":"close","v":"volume"})
-            df["time"] = pd.to_datetime(df["time"])
-            df = df.set_index("time")
-            df["ema9"]  = df["close"].ewm(span=9).mean()
-            df["ema21"] = df["close"].ewm(span=21).mean()
-            delta = df["close"].diff()
-            gain  = delta.clip(lower=0).rolling(14).mean()
-            loss  = (-delta.clip(upper=0)).rolling(14).mean()
-            df["rsi"] = 100 - (100/(1+gain/loss))
-            df["atr"] = (df["high"] - df["low"]).rolling(14).mean()
-            return df, None
-        except Exception as e:
-            return pd.DataFrame(), str(e)
-
+    # Account Cards
     account, positions, acc_err = load_account()
     df, data_err = load_bars(symbol, timeframe)
 
-    # Account Cards
     c1, c2, c3, c4, c5 = st.columns(5)
     if not acc_err:
         cash   = float(account.get("cash", 0))
@@ -206,9 +224,6 @@ else:
         c3.metric("💹 BUYING POWER",   f"${buying:,.2f}")
         c4.metric("📉 UNREALIZED P&L", f"${pnl:,.2f}", delta=f"{pnl:+.2f}")
         c5.metric("🔓 POSITIONS",      len(positions))
-    else:
-        st.error(f"Account error: {acc_err}")
-
     st.markdown("---")
 
     # ── DASHBOARD PAGE ────────────────────────────────────────────────────────
@@ -230,15 +245,14 @@ else:
                 colors = ["#2ea043" if c >= o else "#f85149" for c,o in zip(df["close"], df["open"])]
                 fig.add_trace(go.Bar(x=df.index, y=df["volume"], name="Volume", marker_color=colors), row=3, col=1)
                 fig.update_layout(height=600, paper_bgcolor="#0d1117", plot_bgcolor="#0d1117",
-                                  font=dict(color="#8b949e", family="monospace"),
-                                  xaxis_rangeslider_visible=False,
+                                  font=dict(color="#8b949e"), xaxis_rangeslider_visible=False,
                                   legend=dict(bgcolor="#161b22", bordercolor="#30363d", borderwidth=1),
                                   margin=dict(l=0,r=0,t=30,b=0))
                 fig.update_xaxes(gridcolor="#21262d")
                 fig.update_yaxes(gridcolor="#21262d")
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning(f"⚠️ Market closed or no data")
+                st.warning(f"⚠️ {data_err or 'Market closed or no data'}")
 
         with right:
             st.markdown("### 🎯 LIVE SIGNAL")
@@ -246,203 +260,296 @@ else:
                 prev = df.iloc[-2]
                 curr = df.iloc[-1]
                 if prev["ema9"] < prev["ema21"] and curr["ema9"] > curr["ema21"] and curr["rsi"] < 70:
-                    st.markdown(f'<div class="signal-buy">🟢 BUY SIGNAL<br><small>{symbol} · EMA Crossover UP</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="signal-buy">🟢 BUY SIGNAL<br><small>{symbol}</small></div>', unsafe_allow_html=True)
                 elif prev["ema9"] > prev["ema21"] and curr["ema9"] < curr["ema21"] and curr["rsi"] > 30:
-                    st.markdown(f'<div class="signal-sell">🔴 SELL SIGNAL<br><small>{symbol} · EMA Crossover DOWN</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="signal-sell">🔴 SELL SIGNAL<br><small>{symbol}</small></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="signal-hold">🟡 HOLD<br><small>{symbol} · No Crossover</small></div>', unsafe_allow_html=True)
-                st.markdown("### 📊 LATEST VALUES")
+                    st.markdown(f'<div class="signal-hold">🟡 HOLD<br><small>{symbol}</small></div>', unsafe_allow_html=True)
+                st.markdown("### 📊 VALUES")
                 last = df.iloc[-1]
-                st.metric("Close Price", f"${last['close']:.2f}")
-                st.metric("EMA 9",       f"${last['ema9']:.2f}")
-                st.metric("EMA 21",      f"${last['ema21']:.2f}")
-                st.metric("RSI",         f"{last['rsi']:.1f}")
+                st.metric("Close", f"${last['close']:.4f}")
+                st.metric("EMA 9",  f"${last['ema9']:.4f}")
+                st.metric("EMA 21", f"${last['ema21']:.4f}")
+                st.metric("RSI",    f"{last['rsi']:.1f}")
             else:
                 st.info("Waiting for market data...")
-            st.markdown("### 🕐 MARKET HOURS")
-            st.markdown("**US Market (IST)**")
-            st.markdown("Open: **7:00 PM**")
-            st.markdown("Close: **1:30 AM**")
+            st.markdown("### 🕐 MARKET HOURS (IST)")
+            st.markdown("Open: **7:00 PM** | Close: **1:30 AM**")
 
+    # ── CLIENT TRADING PAGE ───────────────────────────────────────────────────
+    elif page == "💼 My Trading":
+        client = st.session_state.clients[st.session_state.current_user]
+        st.markdown(f"### 💼 MY TRADING PANEL — {client['name'].upper()}")
         st.markdown("---")
-        st.markdown("### 🔓 OPEN POSITIONS")
-        if positions:
-            pdf = pd.DataFrame([{"Symbol":p["symbol"],"Qty":p["qty"],
-                                  "Entry $":p["avg_entry_price"],"Current $":p["current_price"],
-                                  "P&L $":p["unrealized_pl"]} for p in positions])
-            st.dataframe(pdf, use_container_width=True)
-        else:
-            st.info("No open positions — waiting for signals.")
 
-    # ── STRATEGIES PAGE ───────────────────────────────────────────────────────
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### ⚙️ TRADE SETTINGS")
+
+            # Strategy selector
+            available = [k for k,v in STRATEGIES.items() if v != "Empty Slot"]
+            selected_strategy = st.selectbox(
+                "🧠 Select Strategy",
+                available,
+                index=available.index(client["strategy"]) if client["strategy"] in available else 0,
+                help="Choose which strategy to use for trading"
+            )
+
+            # Quantity
+            quantity = st.number_input(
+                "📦 Trade Quantity",
+                min_value=1,
+                max_value=1000,
+                value=client["quantity"],
+                help="Number of units to trade"
+            )
+
+            # Paper / Live toggle
+            st.markdown("#### 🔄 TRADING MODE")
+            mode = st.radio(
+                "Select Mode",
+                ["📄 Paper Trading", "🔴 Live Trading"],
+                index=0 if client["mode"] == "Paper" else 1,
+                help="Paper = No real money | Live = Real money"
+            )
+
+            if "Live" in mode:
+                st.error("⚠️ WARNING: Live Trading uses REAL MONEY!")
+
+            if st.button("💾 SAVE SETTINGS", use_container_width=True):
+                st.session_state.clients[st.session_state.current_user]["strategy"] = selected_strategy
+                st.session_state.clients[st.session_state.current_user]["quantity"] = quantity
+                st.session_state.clients[st.session_state.current_user]["mode"]     = "Live" if "Live" in mode else "Paper"
+                st.success("✅ Settings saved successfully!")
+
+        with col2:
+            st.markdown("#### 📊 MY ACCOUNT SUMMARY")
+            client_balance = client["balance"]
+            client_trades  = client["trades"]
+            total_pnl      = sum(t.get("pnl", 0) for t in client_trades)
+            wins           = len([t for t in client_trades if t.get("pnl", 0) > 0])
+            total          = len(client_trades)
+            win_rate       = (wins/total*100) if total > 0 else 0
+            roi            = (total_pnl/client_balance*100) if client_balance > 0 else 0
+
+            st.metric("💰 Balance",      f"${client_balance:,.2f}")
+            st.metric("📈 Total P&L",    f"${total_pnl:+,.2f}")
+            st.metric("📐 ROI",          f"{roi:+.2f}%")
+            st.metric("🎯 Win Rate",     f"{win_rate:.1f}%")
+            st.metric("📊 Total Trades", total)
+
+            mode_badge = f'<span class="live-badge">🔴 LIVE</span>' if client["mode"] == "Live" else f'<span class="paper-badge">📄 PAPER</span>'
+            st.markdown(f"**Current Mode:** {mode_badge}", unsafe_allow_html=True)
+            st.markdown(f"**Strategy:** {client['strategy']} — {STRATEGIES.get(client['strategy'], 'N/A')}")
+            st.markdown(f"**Quantity:** {client['quantity']} units")
+
+    # ── ADMIN — STRATEGIES PAGE ───────────────────────────────────────────────
     elif page == "🧠 Strategies":
         st.markdown("### 🧠 STRATEGY MANAGER — 5 SLOTS")
-        st.markdown("*Deploy up to 5 strategies simultaneously. Each slot is independent.*")
+        st.markdown("*Admin only — Deploy and manage strategies*")
         st.markdown("---")
-
-        for slot, info in STRATEGIES.items():
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+        for slot, name in STRATEGIES.items():
+            col1, col2, col3 = st.columns([3, 1, 1])
             with col1:
-                if info["status"] == "ACTIVE":
-                    st.markdown(f'<div class="strategy-active">✅ <b>{slot}</b><br><small style="color:#3fb950">{info["name"]}</small></div>', unsafe_allow_html=True)
-                elif info["status"] == "EMPTY":
-                    st.markdown(f'<div class="strategy-empty">📭 <b>{slot}</b><br><small style="color:#8b949e">Empty — Ready for your strategy</small></div>', unsafe_allow_html=True)
+                if name != "Empty Slot":
+                    st.markdown(f'<div class="client-card-active">✅ <b>{slot}</b> — {name}</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="strategy-testing">🧪 <b>{slot}</b><br><small style="color:#d29922">{info["name"]} — Testing</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:#161b22;border:2px dashed #30363d;border-radius:12px;padding:15px;margin:5px 0;">📭 <b>{slot}</b> — Empty · Ready for Pine Script</div>', unsafe_allow_html=True)
             with col2:
-                if info["status"] == "ACTIVE":
-                    st.success(f"🟢 ACTIVE")
-                elif info["status"] == "EMPTY":
-                    st.info("⬜ EMPTY SLOT")
+                if name != "Empty Slot":
+                    st.success("🟢 ACTIVE")
                 else:
-                    st.warning("🟡 TESTING")
+                    st.info("⬜ EMPTY")
             with col3:
-                if info["status"] == "EMPTY":
-                    st.button(f"📤 Upload", key=f"upload_{slot}", disabled=True)
-                else:
+                if name != "Empty Slot":
                     st.button(f"⚙️ Edit", key=f"edit_{slot}")
-            with col4:
-                if info["status"] != "EMPTY":
-                    st.button(f"📈 Backtest", key=f"bt_{slot}")
-
         st.markdown("---")
-        st.info("📝 **How to deploy your strategy:**\n\n1. Paste your Pine Script in this chat\n2. I will convert it to Python\n3. It will be deployed to an empty slot\n4. Run backtest before going live!")
+        st.info("📝 Paste your Pine Script in chat → I will deploy it to an empty slot!")
 
-    # ── BACKTEST PAGE ─────────────────────────────────────────────────────────
+    # ── ADMIN — BACKTEST PAGE ─────────────────────────────────────────────────
     elif page == "📈 Backtest":
         st.markdown("### 📈 STRATEGY BACKTESTER")
-        st.markdown("*Test your strategy on historical data before deploying live*")
         st.markdown("---")
-
         col1, col2, col3 = st.columns(3)
-        with col1:
-            bt_symbol = st.selectbox("📈 Symbol", ["AAPL","TSLA","GOOGL","MSFT","AMZN","SPY","NVDA","META"])
-        with col2:
-            bt_period = st.selectbox("📅 Period", ["1 Month", "3 Months", "6 Months", "1 Year"])
-        with col3:
-            bt_strategy = st.selectbox("🧠 Strategy", ["EMA Crossover (Strategy 1)", "Coming Soon..."])
-
+        with col1: bt_symbol   = st.selectbox("📈 Symbol", ["BTCUSD","XAUUSD","EURUSD"])
+        with col2: bt_period   = st.selectbox("📅 Period", ["1 Month","3 Months","6 Months","1 Year"])
+        with col3: bt_strategy = st.selectbox("🧠 Strategy", ["EMA Crossover (Strategy 1)","Coming Soon..."])
         col4, col5 = st.columns(2)
-        with col4:
-            initial_capital = st.number_input("💰 Initial Capital ($)", value=10000, step=1000)
-        with col5:
-            risk_per_trade = st.number_input("⚠️ Risk per Trade (%)", value=1.0, step=0.5)
+        with col4: initial_capital = st.number_input("💰 Initial Capital ($)", value=10000, step=1000)
+        with col5: risk_per_trade  = st.number_input("⚠️ Risk per Trade (%)", value=1.0, step=0.5)
 
         if st.button("🚀 RUN BACKTEST", use_container_width=True):
-            with st.spinner("Running backtest on historical data..."):
-                # Load historical data
-                period_map = {"1 Month": 200, "3 Months": 500, "6 Months": 1000, "1 Year": 2000}
-                limit = period_map[bt_period]
-                df_bt, err = load_bars(bt_symbol, "1Hour", limit)
-
+            with st.spinner("Running backtest..."):
+                period_map = {"1 Month":200,"3 Months":500,"6 Months":1000,"1 Year":2000}
+                df_bt, err = load_bars(bt_symbol, "1Hour", period_map[bt_period])
                 if err or df_bt.empty:
                     st.error("No historical data available!")
                 else:
-                    # Run EMA Crossover backtest
-                    capital    = initial_capital
-                    position   = 0
-                    entry_price = 0
-                    trades     = []
-                    equity_curve = [capital]
-
+                    capital=initial_capital; position=0; entry_price=0; entry_time=None; trades=[]; equity=[capital]
                     for i in range(22, len(df_bt)):
-                        prev = df_bt.iloc[i-1]
-                        curr = df_bt.iloc[i]
+                        prev=df_bt.iloc[i-1]; curr=df_bt.iloc[i]
+                        if prev["ema9"]<prev["ema21"] and curr["ema9"]>curr["ema21"] and curr["rsi"]<70 and position==0:
+                            shares=int((capital*risk_per_trade/100)/curr["close"])
+                            if shares>0: position=shares; entry_price=curr["close"]; entry_time=df_bt.index[i]
+                        elif prev["ema9"]>prev["ema21"] and curr["ema9"]<curr["ema21"] and curr["rsi"]>30 and position>0:
+                            pnl=(curr["close"]-entry_price)*position; roi=(pnl/(entry_price*position)*100)
+                            capital+=pnl
+                            trades.append({"Strategy":bt_strategy.split("(")[0].strip(),"Entry Time":entry_time.strftime("%Y-%m-%d %H:%M"),
+                                           "Exit Time":df_bt.index[i].strftime("%Y-%m-%d %H:%M"),"Entry $":round(entry_price,4),
+                                           "Exit $":round(curr["close"],4),"Shares":position,"P&L $":round(pnl,2),"ROI %":round(roi,2),
+                                           "Result":"✅ WIN" if pnl>0 else "❌ LOSS"})
+                            position=0; entry_price=0; entry_time=None
+                        equity.append(capital)
 
-                        # BUY signal
-                        if prev["ema9"] < prev["ema21"] and curr["ema9"] > curr["ema21"] and curr["rsi"] < 70 and position == 0:
-                            risk_amount = capital * risk_per_trade / 100
-                            shares = int(risk_amount / curr["close"])
-                            if shares > 0:
-                                position    = shares
-                                entry_price = curr["close"]
-
-                        # SELL signal
-                        elif prev["ema9"] > prev["ema21"] and curr["ema9"] < curr["ema21"] and curr["rsi"] > 30 and position > 0:
-                            pnl = (curr["close"] - entry_price) * position
-                            capital += pnl
-                            trades.append({
-                                "Entry Date": df_bt.index[i-1].strftime("%Y-%m-%d"),
-                                "Exit Date":  df_bt.index[i].strftime("%Y-%m-%d"),
-                                "Entry $":    round(entry_price, 2),
-                                "Exit $":     round(curr["close"], 2),
-                                "Shares":     position,
-                                "P&L $":      round(pnl, 2),
-                                "Result":     "✅ WIN" if pnl > 0 else "❌ LOSS",
-                            })
-                            position    = 0
-                            entry_price = 0
-                        equity_curve.append(capital)
-
-                    # Results
                     if trades:
-                        trades_df  = pd.DataFrame(trades)
-                        total_pnl  = capital - initial_capital
-                        wins       = len([t for t in trades if t["P&L $"] > 0])
-                        losses     = len([t for t in trades if t["P&L $"] <= 0])
-                        win_rate   = wins / len(trades) * 100
-                        best_trade = max(trades, key=lambda x: x["P&L $"])
-                        worst_trade= min(trades, key=lambda x: x["P&L $"])
-
-                        # Summary cards
-                        st.markdown("---")
-                        st.markdown("### 📊 BACKTEST RESULTS")
-                        r1, r2, r3, r4, r5 = st.columns(5)
-                        r1.metric("💰 Final Capital", f"${capital:,.2f}", delta=f"${total_pnl:+,.2f}")
-                        r2.metric("📈 Total Return",  f"{(total_pnl/initial_capital*100):+.1f}%")
-                        r3.metric("🎯 Win Rate",      f"{win_rate:.1f}%")
-                        r4.metric("✅ Wins",           wins)
-                        r5.metric("❌ Losses",         losses)
-
-                        r6, r7, r8 = st.columns(3)
-                        r6.metric("🏆 Best Trade",  f"${best_trade['P&L $']:+,.2f}")
-                        r7.metric("💔 Worst Trade", f"${worst_trade['P&L $']:+,.2f}")
-                        r8.metric("📊 Total Trades", len(trades))
-
-                        # Equity curve
-                        st.markdown("### 📈 EQUITY CURVE")
-                        fig_eq = go.Figure()
-                        fig_eq.add_trace(go.Scatter(
-                            y=equity_curve,
-                            mode="lines",
-                            name="Portfolio Value",
-                            line=dict(color="#00d4aa", width=2),
-                            fill="tozeroy",
-                            fillcolor="rgba(0,212,170,0.1)"
-                        ))
-                        fig_eq.add_hline(y=initial_capital, line_dash="dot", line_color="#8b949e")
-                        fig_eq.update_layout(
-                            height=300,
-                            paper_bgcolor="#0d1117",
-                            plot_bgcolor="#0d1117",
-                            font=dict(color="#8b949e"),
-                            margin=dict(l=0,r=0,t=20,b=0),
-                            showlegend=False
-                        )
-                        fig_eq.update_xaxes(gridcolor="#21262d")
-                        fig_eq.update_yaxes(gridcolor="#21262d")
-                        st.plotly_chart(fig_eq, use_container_width=True)
-
-                        # Trade history
-                        st.markdown("### 📋 TRADE HISTORY")
-                        st.dataframe(trades_df.style.format({
-                            "Entry $": "{:.2f}",
-                            "Exit $":  "{:.2f}",
-                            "P&L $":   "{:+.2f}",
-                        }), use_container_width=True)
-
-                        # Deploy option
-                        st.markdown("---")
-                        if win_rate >= 50 and total_pnl > 0:
-                            st.success(f"✅ Strategy looks PROFITABLE! Win rate: {win_rate:.1f}% | Return: {(total_pnl/initial_capital*100):+.1f}%")
-                            if st.button("🚀 DEPLOY THIS STRATEGY TO LIVE BOT", use_container_width=True):
-                                st.balloons()
-                                st.success("Strategy deployed to Strategy Slot 1!")
+                        df_t=pd.DataFrame(trades); total_pnl=capital-initial_capital
+                        wins=len([t for t in trades if t["P&L $"]>0]); losses=len(trades)-wins
+                        win_rate=wins/len(trades)*100; total_roi=total_pnl/initial_capital*100
+                        r1,r2,r3,r4,r5,r6=st.columns(6)
+                        r1.metric("💰 Final Capital",f"${capital:,.2f}",delta=f"${total_pnl:+,.2f}")
+                        r2.metric("📈 Total ROI",f"{total_roi:+.2f}%")
+                        r3.metric("🎯 Win Rate",f"{win_rate:.1f}%")
+                        r4.metric("✅ Wins",wins); r5.metric("❌ Losses",losses); r6.metric("📊 Trades",len(trades))
+                        fig_eq=go.Figure()
+                        fig_eq.add_trace(go.Scatter(y=equity,mode="lines",line=dict(color="#00d4aa",width=2),fill="tozeroy",fillcolor="rgba(0,212,170,0.1)"))
+                        fig_eq.update_layout(height=250,paper_bgcolor="#0d1117",plot_bgcolor="#0d1117",font=dict(color="#8b949e"),margin=dict(l=0,r=0,t=10,b=0),showlegend=False)
+                        fig_eq.update_xaxes(gridcolor="#21262d"); fig_eq.update_yaxes(gridcolor="#21262d")
+                        st.plotly_chart(fig_eq,use_container_width=True)
+                        st.dataframe(df_t.style.format({"Entry $":"{:.4f}","Exit $":"{:.4f}","P&L $":"{:+.2f}","ROI %":"{:+.2f}%"}),use_container_width=True)
+                        if win_rate>=50 and total_pnl>0:
+                            st.success(f"✅ Strategy PROFITABLE! Win Rate: {win_rate:.1f}% | ROI: {total_roi:+.2f}%")
                         else:
-                            st.warning(f"⚠️ Strategy needs improvement. Win rate: {win_rate:.1f}% | Return: {(total_pnl/initial_capital*100):+.1f}%")
-                            st.info("Consider adjusting your strategy parameters before deploying live.")
+                            st.warning(f"⚠️ Needs improvement. Win Rate: {win_rate:.1f}% | ROI: {total_roi:+.2f}%")
                     else:
-                        st.warning("No trades generated in this period. Try a longer timeframe.")
+                        st.warning("No trades generated.")
+
+    # ── TRADE REPORT ──────────────────────────────────────────────────────────
+    elif page in ["📋 Trade Report", "📋 My Trade Report"]:
+        if st.session_state.role == "admin":
+            st.markdown("### 📋 ALL CLIENTS TRADE REPORT")
+            # Admin sees all clients
+            filter_client = st.selectbox("👥 Filter by Client", ["All"] + list(st.session_state.clients.keys()))
+        else:
+            st.markdown(f"### 📋 MY TRADE REPORT — {st.session_state.clients[st.session_state.current_user]['name'].upper()}")
+            filter_client = st.session_state.current_user
+
+        sample_trades = [
+            {"Client":"client1","Strategy":"EMA Crossover","Symbol":"BTCUSD","Entry Time":"2026-06-20 19:15","Square Off Time":"2026-06-20 21:30","Entry $":65420.50,"Exit $":66100.00,"Qty":1,"P&L $":679.50,"ROI %":1.04,"Mode":"Paper","Result":"✅ WIN"},
+            {"Client":"client1","Strategy":"EMA Crossover","Symbol":"EURUSD","Entry Time":"2026-06-21 09:00","Square Off Time":"2026-06-21 11:30","Entry $":1.0842,"Exit $":1.0780,"Qty":1000,"P&L $":-62.00,"ROI %":-0.57,"Mode":"Paper","Result":"❌ LOSS"},
+            {"Client":"client2","Strategy":"EMA Crossover","Symbol":"BTCUSD","Entry Time":"2026-06-21 08:00","Square Off Time":"2026-06-21 10:00","Entry $":66200.00,"Exit $":67100.00,"Qty":1,"P&L $":900.00,"ROI %":1.36,"Mode":"Paper","Result":"✅ WIN"},
+        ]
+
+        if filter_client == "All":
+            all_trades = sample_trades
+        else:
+            all_trades = [t for t in sample_trades if t["Client"] == filter_client]
+
+        if all_trades:
+            total_pnl = sum(t["P&L $"] for t in all_trades)
+            wins      = len([t for t in all_trades if t["P&L $"] > 0])
+            losses    = len(all_trades) - wins
+            win_rate  = wins/len(all_trades)*100
+            avg_roi   = sum(t["ROI %"] for t in all_trades)/len(all_trades)
+
+            s1,s2,s3,s4,s5,s6 = st.columns(6)
+            s1.metric("📊 Total Trades", len(all_trades))
+            s2.metric("💰 Total P&L",    f"${total_pnl:+,.2f}")
+            s3.metric("🎯 Win Rate",     f"{win_rate:.1f}%")
+            s4.metric("✅ Wins",          wins)
+            s5.metric("❌ Losses",        losses)
+            s6.metric("📐 Avg ROI",      f"{avg_roi:+.2f}%")
+
+            st.markdown("---")
+            st.markdown("### 📋 TRADE DETAILS")
+            df_report = pd.DataFrame(all_trades)
+            if st.session_state.role == "client":
+                df_report = df_report.drop(columns=["Client"])
+            st.dataframe(df_report.style.format({
+                "Entry $":  "{:.4f}",
+                "Exit $":   "{:.4f}",
+                "P&L $":    "{:+.2f}",
+                "ROI %":    "{:+.2f}%",
+            }), use_container_width=True)
+
+            # P&L Chart
+            fig_pnl = go.Figure()
+            colors  = ["#2ea043" if t["P&L $"]>0 else "#f85149" for t in all_trades]
+            fig_pnl.add_trace(go.Bar(x=[t["Entry Time"] for t in all_trades],
+                                      y=[t["P&L $"] for t in all_trades],
+                                      marker_color=colors, name="P&L"))
+            fig_pnl.update_layout(height=300,paper_bgcolor="#0d1117",plot_bgcolor="#0d1117",
+                                   font=dict(color="#8b949e"),margin=dict(l=0,r=0,t=20,b=0))
+            fig_pnl.update_xaxes(gridcolor="#21262d"); fig_pnl.update_yaxes(gridcolor="#21262d")
+            st.plotly_chart(fig_pnl, use_container_width=True)
+        else:
+            st.info("No trades found.")
+
+    # ── ADMIN — CLIENT MANAGER ────────────────────────────────────────────────
+    elif page == "👥 Client Manager":
+        st.markdown("### 👥 CLIENT MANAGER — ADMIN ONLY")
+        st.markdown("*Activate, deactivate and manage all client accounts*")
+        st.markdown("---")
+
+        for cid, client in st.session_state.clients.items():
+            col1, col2, col3, col4, col5, col6 = st.columns([2,1,1,1,1,1])
+
+            with col1:
+                if client["active"]:
+                    st.markdown(f'<div class="client-card-active">✅ <b>{client["name"]}</b><br><small style="color:#8b949e">@{client["username"]}</small></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="client-card-inactive">❌ <b>{client["name"]}</b><br><small style="color:#8b949e">@{client["username"]} · DEACTIVATED</small></div>', unsafe_allow_html=True)
+
+            with col2:
+                status = "🟢 ACTIVE" if client["active"] else "🔴 INACTIVE"
+                st.markdown(f"**Status:** {status}")
+
+            with col3:
+                mode_badge = f'<span class="live-badge">🔴 LIVE</span>' if client["mode"]=="Live" else f'<span class="paper-badge">📄 PAPER</span>'
+                st.markdown(f"**Mode:** {mode_badge}", unsafe_allow_html=True)
+
+            with col4:
+                st.markdown(f"**Strategy:** {client['strategy']}")
+
+            with col5:
+                # Activate / Deactivate toggle
+                if client["active"]:
+                    if st.button(f"🔴 Deactivate", key=f"deact_{cid}"):
+                        st.session_state.clients[cid]["active"] = False
+                        st.success(f"✅ {client['name']} deactivated!")
+                        st.rerun()
+                else:
+                    if st.button(f"🟢 Activate", key=f"act_{cid}"):
+                        st.session_state.clients[cid]["active"] = True
+                        st.success(f"✅ {client['name']} activated!")
+                        st.rerun()
+
+            with col6:
+                # Reset password
+                if st.button(f"🔑 Reset", key=f"reset_{cid}"):
+                    st.session_state.clients[cid]["password"] = f"{cid.capitalize()}@123"
+                    st.info(f"Password reset to: {cid.capitalize()}@123")
+
+            st.markdown("---")
+
+        # Edit client details
+        st.markdown("### ✏️ EDIT CLIENT DETAILS")
+        edit_client = st.selectbox("Select Client", list(st.session_state.clients.keys()))
+        client_data = st.session_state.clients[edit_client]
+
+        ec1, ec2, ec3 = st.columns(3)
+        with ec1:
+            new_name = st.text_input("👤 Client Name", value=client_data["name"])
+        with ec2:
+            new_pass = st.text_input("🔒 New Password", value=client_data["password"])
+        with ec3:
+            new_balance = st.number_input("💰 Balance ($)", value=client_data["balance"], step=1000)
+
+        if st.button("💾 UPDATE CLIENT", use_container_width=True):
+            st.session_state.clients[edit_client]["name"]    = new_name
+            st.session_state.clients[edit_client]["password"]= new_pass
+            st.session_state.clients[edit_client]["balance"] = new_balance
+            st.success(f"✅ {new_name} updated successfully!")
 
     if auto_refresh:
         time.sleep(30)
