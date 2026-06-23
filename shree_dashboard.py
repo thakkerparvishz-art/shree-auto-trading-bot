@@ -6,7 +6,11 @@ from datetime import datetime, timedelta, timezone
 import requests
 import time
 import random
-import yfinance as yf
+try:
+    import yfinance as yf
+    YF_AVAILABLE = True
+except ImportError:
+    YF_AVAILABLE = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
 API_KEY    = "PKMZNC3C3GPVPO3LE7MIKZDS47"
@@ -95,6 +99,8 @@ if "locked_until"   not in st.session_state: st.session_state.locked_until   = N
 # ── Data Loading ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=60)
 def load_yf_data(symbol, timeframe):
+    if not YF_AVAILABLE:
+        return pd.DataFrame(), "yfinance not available"
     try:
         yf_symbol  = SYMBOL_MAP.get(symbol, symbol)
         yf_tf      = TIMEFRAME_MAP.get(timeframe, "15m")
@@ -127,6 +133,10 @@ def load_account():
 @st.cache_data(ttl=60)
 def get_live_prices():
     prices = {}
+    if not YF_AVAILABLE:
+        for name in SYMBOL_MAP:
+            prices[name] = {"price": 0, "change": 0, "change_pct": 0}
+        return prices
     for name, sym in SYMBOL_MAP.items():
         try:
             ticker = yf.Ticker(sym)
@@ -137,6 +147,8 @@ def get_live_prices():
                 chg   = curr - prev
                 chgp  = (chg/prev*100) if prev > 0 else 0
                 prices[name] = {"price": curr, "change": chg, "change_pct": chgp}
+            else:
+                prices[name] = {"price": 0, "change": 0, "change_pct": 0}
         except:
             prices[name] = {"price": 0, "change": 0, "change_pct": 0}
     return prices
