@@ -310,17 +310,56 @@ def get_ohlcv(symbol):
         if symbol == "BTCUSD":
             r    = requests.get("https://api.coingecko.com/api/v3/coins/bitcoin/ohlc?vs_currency=usd&days=1", timeout=10)
             data = r.json()
-            rows = [{"time": str(d[0]), "open":d[1],"high":d[2],"low":d[3],"close":d[4],"volume":0} for d in data]
+            rows = [{"time":str(d[0]),"open":d[1],"high":d[2],"low":d[3],"close":d[4],"volume":0} for d in data]
+            return rows
+        elif symbol == "XAUUSD":
+            # Yahoo Finance for Gold futures
+            r    = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=15m&range=5d", timeout=10)
+            d    = r.json()
+            result = d["chart"]["result"][0]
+            times  = result["timestamp"]
+            ohlcv  = result["indicators"]["quote"][0]
+            rows   = []
+            for i in range(len(times)):
+                if ohlcv["close"][i]:
+                    rows.append({
+                        "time":   str(times[i]),
+                        "open":   ohlcv["open"][i]  or 0,
+                        "high":   ohlcv["high"][i]  or 0,
+                        "low":    ohlcv["low"][i]   or 0,
+                        "close":  ohlcv["close"][i] or 0,
+                        "volume": ohlcv["volume"][i] or 0,
+                    })
+            return rows
+        elif symbol == "EURUSD":
+            # Yahoo Finance for EUR/USD
+            r    = requests.get("https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?interval=15m&range=5d", timeout=10)
+            d    = r.json()
+            result = d["chart"]["result"][0]
+            times  = result["timestamp"]
+            ohlcv  = result["indicators"]["quote"][0]
+            rows   = []
+            for i in range(len(times)):
+                if ohlcv["close"][i]:
+                    rows.append({
+                        "time":   str(times[i]),
+                        "open":   ohlcv["open"][i]  or 0,
+                        "high":   ohlcv["high"][i]  or 0,
+                        "low":    ohlcv["low"][i]   or 0,
+                        "close":  ohlcv["close"][i] or 0,
+                        "volume": ohlcv["volume"][i] or 0,
+                    })
             return rows
         else:
-            base = 1.085 if symbol=="EURUSD" else 1950.0
-            rows = []
-            for i in range(100):
-                c = base*(1+random.uniform(-0.002,0.002))
-                rows.append({"time":str(i),"open":c,"high":c*1.001,"low":c*0.999,"close":c,"volume":random.randint(100,1000)})
-            return rows
-    except:
-        return []
+            return []
+    except Exception as e:
+        # Fallback mock data
+        base = 1.085 if symbol=="EURUSD" else 1950.0 if symbol=="XAUUSD" else 60000.0
+        rows = []
+        for i in range(100):
+            c = base*(1+random.uniform(-0.002,0.002))
+            rows.append({"time":str(i),"open":c,"high":c*1.001,"low":c*0.999,"close":c,"volume":random.randint(100,1000)})
+        return rows
 
 @st.cache_data(ttl=30)
 def load_account():
